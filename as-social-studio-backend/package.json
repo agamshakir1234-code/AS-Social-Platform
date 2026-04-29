@@ -1,0 +1,31 @@
+{
+  "name": "as-social-studio-backend",
+  "version": "1.0.0",
+  "description": "Backend API for AS Social Studio – clients, posts, leads, dashboard KPIs",
+  "main": "netlify/functions/api.js",
+  "scripts": {
+    "seed": "node seed-users.js",
+    "dev": "netlify dev",
+    "start": "node netlify/functions/api.js",
+    "lint": "eslint src/**/*.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "express-rate-limit": "^7.3.1",
+    "express-validator": "^7.1.0",
+    "firebase-admin": "^12.2.0",
+    "helmet": "^7.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "node-fetch": "^2.7.0",
+    "serverless-http": "^3.2.0"
+  },
+  "devDependencies": {
+    "netlify-cli": "^17.23.5"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

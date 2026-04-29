@@ -1,0 +1,21 @@
+[build]
+  functions = "netlify/functions"
+  publish    = "public"
+
+# Redirect all /api/* traffic to the Express function
+[[redirects]]
+  from   = "/api/*"
+  to     = "/.netlify/functions/api/:splat"
+  status = 200
+
+# Redirect bare /api to the function as well
+[[redirects]]
+  from   = "/api"
+  to     = "/.netlify/functions/api"
+  status = 200
+
+[functions]
+  node_bundler = "esbuild"
+
+[dev]
+  port = 8888  
