@@ -1,0 +1,773 @@
+import { useState, useEffect, useMemo } from 'react'
+import { useOutletContext } from 'react-router-dom'
+import { Plus, ChevronRight, ChevronLeft, Zap, X, Check } from 'lucide-react'
+
+// ── Brand tokens ──────────────────────────────────────────────
+const G = {
+  smoke:     '#5E685E',
+  smokeDark: '#445246',
+  beige:     '#E8E1D8',
+  gold:      '#B49A74',
+  ivory:     '#F7F4EF',
+  white:     '#FFFFFF',
+  text:      '#1C1C1C',
+  muted:     '#7A7A6E',
+  border:    'rgba(94,104,94,0.12)',
+}
+
+// Platform definitions
+const PLATFORMS = {
+  instagram: { label: 'Instagram',  labelHe: 'אינסטגרם', color: '#C48BD3', bg: '#F5ECFA' },
+  tiktok:    { label: 'TikTok',     labelHe: 'טיקטוק',   color: '#3D8FB5', bg: '#E8F4FA' },
+  facebook:  { label: 'Facebook',   labelHe: 'פייסבוק',  color: '#4267B2', bg: '#EBF0FF' },
+  event:     { label: 'חג / אירוע', labelHe: 'חג / אירוע', color: '#B49A74', bg: '#F5EFE6' },
+  task:      { label: 'משימה',      labelHe: 'משימה',    color: '#8E9484', bg: '#EEF0EB' },
+}
+
+// Content type definitions
+const EVENT_TYPES = {
+  post:    { label: 'פוסט',   labelEn: 'Post'    },
+  reel:    { label: 'ריל',    labelEn: 'Reel'    },
+  story:   { label: 'סטורי',  labelEn: 'Story'   },
+  tiktok:  { label: 'טיקטוק', labelEn: 'TikTok'  },
+  meeting: { label: 'פגישה',  labelEn: 'Meeting' },
+  task:    { label: 'משימה',  labelEn: 'Task'    },
+}
+
+// Client palette pool
+const CLIENT_COLORS = [
+  '#5E685E','#B49A74','#8E6B5A','#4A7C8E',
+  '#7A6E8E','#8E4A5A','#4A8E6B','#6B4A8E',
+]
+
+const DAYS_HE  = ['ראשון','שני','שלישי','רביעי','חמישי','שישי','שבת']
+const DAYS_EN  = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']
+const MONTHS_HE = ['ינואר','פברואר','מרץ','אפריל','מאי','יוני',
+                   'יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר']
+const MONTHS_EN = ['January','February','March','April','May','June',
+                   'July','August','September','October','November','December']
+const HOURS = Array.from({ length: 14 }, (_, i) => i + 7) // 07:00–20:00
+
+// ── Helpers ───────────────────────────────────────────────────
+function getWeekStart(date) {
+  const d = new Date(date)
+  d.setDate(d.getDate() - d.getDay())
+  d.setHours(0, 0, 0, 0)
+  return d
+}
+
+function isSameDay(a, b) {
+  return (
+    a.getDate()     === b.getDate() &&
+    a.getMonth()    === b.getMonth() &&
+    a.getFullYear() === b.getFullYear()
+  )
+}
+
+// ── Component ─────────────────────────────────────────────────
+export default function Planner() {
+  const ctx = useOutletContext() || {}
+  const lang = ctx.lang || 'he'
+  const isHe = lang !== 'en'
+
+  // ── State ──────────────────────────────────────────────────
+  const [weekStart, setWeekStart] = useState(() => getWeekStart(new Date()))
+  const [view, setView]           = useState('weekly')
+
+  const [events, setEvents] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('planner_events') || '[]') } catch { return [] }
+  })
+  const [clients, setClients] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('as_clients') || '[]') } catch { return [] }
+  })
+
+  const [filterClients,   setFilterClients]   = useState([])
+  const [filterPlatforms, setFilterPlatforms] = useState([])
+
+  const [showModal,    setShowModal]    = useState(false)
+  const [editingEvent, setEditingEvent] = useState(null)
+  const [form, setForm] = useState(makeEmptyForm())
+
+  const [aiNotif, setAiNotif] = useState(null)
+
+  function makeEmptyForm() {
+    return {
+      clientId: '', platform: 'instagram', type: 'post',
+      date: new Date().toISOString().slice(0, 10),
+      time: '09:00', title: '', notes: '', autoDispatch: true,
+    }
+  }
+
+  // Persist events
+  useEffect(() => {
+    localStorage.setItem('planner_events', JSON.stringify(events))
+  }, [events])
+
+  // Week days array
+  const weekDays = useMemo(() =>
+    Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(weekStart)
+      d.setDate(d.getDate() + i)
+      return d
+    }), [weekStart])
+
+  // Client → color map
+  const clientColorMap = useMemo(() => {
+    const map = {}
+    clients.forEach((c, i) => { map[c.id] = CLIENT_COLORS[i % CLIENT_COLORS.length] })
+    return map
+  }, [clients])
+
+  // Filtered events
+  const filteredEvents = useMemo(() =>
+    events.filter(e => {
+      if (filterClients.length   && !filterClients.includes(e.clientId))     return false
+      if (filterPlatforms.length && !filterPlatforms.includes(e.platform))   return false
+      return true
+    }), [events, filterClients, filterPlatforms])
+
+  // Events for a specific day+hour slot
+  function getEventsAt(day, hour) {
+    const dateStr = day.toISOString().slice(0, 10)
+    return filteredEvents.filter(e => {
+      if (e.date !== dateStr) return false
+      return parseInt(e.time?.split(':')[0] || '0') === hour
+    })
+  }
+
+  // ── Navigation ─────────────────────────────────────────────
+  function prevWeek() {
+    const d = new Date(weekStart); d.setDate(d.getDate() - 7); setWeekStart(d)
+  }
+  function nextWeek() {
+    const d = new Date(weekStart); d.setDate(d.getDate() + 7); setWeekStart(d)
+  }
+
+  // ── Modal helpers ──────────────────────────────────────────
+  function openAdd(date, hour) {
+    const dateStr = date
+      ? date.toISOString().slice(0, 10)
+      : new Date().toISOString().slice(0, 10)
+    const timeStr = hour !== undefined
+      ? `${String(hour).padStart(2, '0')}:00`
+      : '09:00'
+    setForm({
+      ...makeEmptyForm(),
+      clientId: clients[0]?.id || '',
+      date: dateStr,
+      time: timeStr,
+    })
+    setEditingEvent(null)
+    setShowModal(true)
+  }
+
+  function openEdit(ev) {
+    setForm({ ...ev, autoDispatch: false })
+    setEditingEvent(ev.id)
+    setShowModal(true)
+  }
+
+  function saveEvent() {
+    if (!form.title.trim()) return
+    const id = editingEvent || `evt_${Date.now()}`
+    const ev  = { ...form, id }
+
+    if (editingEvent) {
+      setEvents(prev => prev.map(e => e.id === editingEvent ? ev : e))
+    } else {
+      setEvents(prev => [...prev, ev])
+      if (form.autoDispatch) autoDispatch(ev)
+    }
+    setShowModal(false)
+  }
+
+  function deleteEvent(id) {
+    setEvents(prev => prev.filter(e => e.id !== id))
+    setShowModal(false)
+  }
+
+  // ── AI Auto-dispatch ───────────────────────────────────────
+  function autoDispatch(ev) {
+    const client     = clients.find(c => c.id === ev.clientId)
+    const clientName = client?.name || ''
+
+    // 1. Global daily tasks
+    const globalTasks = JSON.parse(localStorage.getItem('as_tasks') || '[]')
+    globalTasks.push({
+      id: `task_${Date.now()}`,
+      text: `${ev.title}${clientName ? ` — ${clientName}` : ''}`,
+      date: ev.date, time: ev.time,
+      done: false, priority: 'medium',
+      source: 'planner', eventId: ev.id, category: 'daily_review',
+    })
+    localStorage.setItem('as_tasks', JSON.stringify(globalTasks))
+
+    // 2. Client-specific tasks
+    if (ev.clientId) {
+      const cTasks = JSON.parse(localStorage.getItem(`tasks_${ev.clientId}`) || '[]')
+      cTasks.push({
+        id: `ctask_${Date.now()}`,
+        text: ev.title, date: ev.date, time: ev.time,
+        platform: ev.platform, type: ev.type,
+        done: false, priority: 'medium',
+        source: 'planner', eventId: ev.id,
+      })
+      localStorage.setItem(`tasks_${ev.clientId}`, JSON.stringify(cTasks))
+    }
+
+    setAiNotif({ client: clientName, title: ev.title })
+    setTimeout(() => setAiNotif(null), 3500)
+  }
+
+  // ── Week label ─────────────────────────────────────────────
+  const weekLabel = (() => {
+    const s = weekDays[0], e = weekDays[6]
+    return isHe
+      ? `${s.getDate()}–${e.getDate()} ${MONTHS_HE[e.getMonth()]} ${e.getFullYear()}`
+      : `${MONTHS_EN[s.getMonth()]} ${s.getDate()} – ${e.getDate()}, ${e.getFullYear()}`
+  })()
+
+  // ── Shared style fragments ─────────────────────────────────
+  const sans  = { fontFamily: "'Inter', 'Heebo', sans-serif" }
+  const serif = { fontFamily: "'Cormorant Garamond', serif" }
+
+  const inputStyle = {
+    ...sans, width: '100%', padding: '10px 14px', borderRadius: 10,
+    border: `1.5px solid ${G.border}`, fontSize: 13,
+    background: G.ivory, color: G.text, outline: 'none', boxSizing: 'border-box',
+  }
+  const labelStyle = {
+    fontSize: 11, fontWeight: 600, color: G.muted,
+    display: 'block', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.05em',
+  }
+
+  // ── Render ─────────────────────────────────────────────────
+  return (
+    <div style={{ background: G.ivory, minHeight: '100vh', direction: isHe ? 'rtl' : 'ltr', ...sans }}>
+
+      {/* ═══════════════════════════════════ Filter Bar */}
+      <div style={{
+        background: G.white,
+        borderBottom: `1px solid ${G.border}`,
+        padding: '14px 28px',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        gap: 12, flexWrap: 'wrap',
+      }}>
+        {/* Client chips */}
+        <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap', alignItems: 'center' }}>
+          {/* All-clients dropdown */}
+          <select
+            value={filterClients.length === 1 ? filterClients[0] : ''}
+            onChange={e => setFilterClients(e.target.value ? [e.target.value] : [])}
+            style={{
+              ...sans, fontSize: 12, padding: '5px 12px',
+              border: `1px solid ${G.border}`, borderRadius: 8,
+              background: G.ivory, color: G.text, cursor: 'pointer',
+            }}
+          >
+            <option value="">{isHe ? 'כל הלקוחות' : 'All Clients'}</option>
+            {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+
+          {/* Individual client chips */}
+          {clients.slice(0, 6).map(c => {
+            const color   = clientColorMap[c.id] || G.smoke
+            const active  = filterClients.includes(c.id)
+            return (
+              <button key={c.id}
+                onClick={() =>
+                  setFilterClients(p =>
+                    active ? p.filter(x => x !== c.id) : [...p, c.id]
+                  )
+                }
+                style={{
+                  ...sans, display: 'flex', alignItems: 'center', gap: 5,
+                  padding: '4px 12px', borderRadius: 20, cursor: 'pointer',
+                  background: active ? color : 'transparent',
+                  border: `1.5px solid ${color}`,
+                  fontSize: 11, fontWeight: 500,
+                  color: active ? G.white : color,
+                  transition: 'all 0.15s',
+                }}
+              >
+                <span style={{
+                  width: 7, height: 7, borderRadius: '50%',
+                  background: active ? G.white : color, flexShrink: 0,
+                }} />
+                {c.name}
+              </button>
+            )
+          })}
+        </div>
+
+        {/* Platform filter chips */}
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          {Object.entries(PLATFORMS).map(([key, p]) => {
+            const active = filterPlatforms.includes(key)
+            return (
+              <button key={key}
+                onClick={() =>
+                  setFilterPlatforms(prev =>
+                    active ? prev.filter(x => x !== key) : [...prev, key]
+                  )
+                }
+                style={{
+                  ...sans, display: 'flex', alignItems: 'center', gap: 5,
+                  padding: '4px 12px', borderRadius: 20, cursor: 'pointer',
+                  background: active ? p.color : p.bg,
+                  border: `1.5px solid ${p.color}`,
+                  fontSize: 11, fontWeight: 500,
+                  color: active ? G.white : p.color,
+                  transition: 'all 0.15s',
+                }}
+              >
+                <span style={{
+                  width: 7, height: 7, borderRadius: '50%',
+                  background: active ? G.white : p.color, flexShrink: 0,
+                }} />
+                {isHe ? p.labelHe : p.label}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* ═══════════════════════════════════ Toolbar */}
+      <div style={{
+        background: G.white,
+        borderBottom: `1px solid ${G.border}`,
+        padding: '12px 28px',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        gap: 12,
+      }}>
+        {/* View toggle */}
+        <div style={{ display: 'flex', gap: 2, background: G.ivory, borderRadius: 10, padding: 3 }}>
+          {[
+            { v: 'weekly',  he: 'שבועי',  en: 'Weekly'  },
+            { v: 'monthly', he: 'חודשי',  en: 'Monthly' },
+            { v: 'yearly',  he: 'שנתי',   en: 'Yearly'  },
+          ].map(({ v, he, en }) => (
+            <button key={v} onClick={() => setView(v)} style={{
+              ...sans, fontSize: 12, padding: '6px 18px', borderRadius: 8,
+              border: 'none', cursor: 'pointer', fontWeight: 500,
+              background: view === v ? G.smoke : 'transparent',
+              color:      view === v ? G.white : G.muted,
+              transition: 'all 0.2s',
+            }}>
+              {isHe ? he : en}
+            </button>
+          ))}
+        </div>
+
+        {/* Week navigation */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <button onClick={prevWeek} style={{ background: 'none', border: 'none', cursor: 'pointer', color: G.smoke, padding: 4 }}>
+            {isHe ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
+          </button>
+
+          <span style={{ ...serif, fontSize: 17, fontWeight: 600, color: G.text, minWidth: 200, textAlign: 'center' }}>
+            {weekLabel}
+          </span>
+
+          <button onClick={nextWeek} style={{ background: 'none', border: 'none', cursor: 'pointer', color: G.smoke, padding: 4 }}>
+            {isHe ? <ChevronLeft size={18} /> : <ChevronRight size={18} />}
+          </button>
+
+          <button
+            onClick={() => setWeekStart(getWeekStart(new Date()))}
+            style={{
+              ...sans, fontSize: 11, padding: '5px 14px', borderRadius: 8,
+              background: G.ivory, border: `1px solid ${G.border}`,
+              color: G.smoke, cursor: 'pointer', fontWeight: 500,
+            }}
+          >
+            {isHe ? 'היום' : 'Today'}
+          </button>
+        </div>
+
+        {/* Action buttons */}
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={() => openAdd()} style={{
+            ...sans, display: 'flex', alignItems: 'center', gap: 6,
+            padding: '8px 18px', borderRadius: 10, border: 'none',
+            background: `linear-gradient(135deg, ${G.smokeDark}, ${G.smoke})`,
+            color: G.white, fontSize: 13, fontWeight: 600, cursor: 'pointer',
+            boxShadow: '0 2px 8px rgba(94,104,94,0.25)',
+          }}>
+            <Zap size={14} /> {isHe ? 'תזמון מהיר' : 'Quick Schedule'}
+          </button>
+          <button onClick={() => openAdd()} style={{
+            ...sans, display: 'flex', alignItems: 'center', gap: 6,
+            padding: '8px 18px', borderRadius: 10, cursor: 'pointer',
+            border: `1.5px solid ${G.smoke}`, background: 'transparent',
+            color: G.smoke, fontSize: 13, fontWeight: 600,
+          }}>
+            <Plus size={14} /> {isHe ? '+ הוסף' : '+ Add'}
+          </button>
+        </div>
+      </div>
+
+      {/* ═══════════════════════════════════ Calendar Grid */}
+      <div style={{ padding: '16px 28px 40px' }}>
+        <div style={{
+          background: G.white, borderRadius: 16,
+          border: `1px solid ${G.border}`,
+          boxShadow: '0 4px 24px rgba(94,104,94,0.06)',
+          overflow: 'hidden',
+        }}>
+
+          {/* Day header row */}
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: '72px repeat(7, 1fr)',
+            borderBottom: `1px solid ${G.border}`,
+            background: G.ivory,
+          }}>
+            {/* Corner cell */}
+            <div style={{
+              borderRight: isHe ? 'none' : `1px solid ${G.border}`,
+              borderLeft:  isHe ? `1px solid ${G.border}` : 'none',
+            }} />
+
+            {weekDays.map((day, i) => {
+              const today = isSameDay(day, new Date())
+              return (
+                <div key={i} style={{
+                  padding: '12px 8px', textAlign: 'center',
+                  borderRight: isHe ? 'none' : `1px solid ${G.border}`,
+                  borderLeft:  isHe ? `1px solid ${G.border}` : 'none',
+                }}>
+                  <div style={{ fontSize: 10, color: G.muted, fontWeight: 600, marginBottom: 5, letterSpacing: '0.04em' }}>
+                    {isHe ? DAYS_HE[i] : DAYS_EN[i]}
+                  </div>
+                  <div style={{
+                    ...serif,
+                    fontSize: 22, fontWeight: 700,
+                    color:      today ? G.white : G.text,
+                    background: today ? G.smoke : 'transparent',
+                    width: 38, height: 38, borderRadius: '50%',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    margin: '0 auto',
+                  }}>
+                    {day.getDate()}
+                  </div>
+                  <div style={{ fontSize: 10, color: G.muted, marginTop: 3 }}>
+                    {day.getDate()}/{day.getMonth() + 1}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+
+          {/* Hourly rows */}
+          {HOURS.map(hour => (
+            <div key={hour} style={{
+              display: 'grid',
+              gridTemplateColumns: '72px repeat(7, 1fr)',
+              borderBottom: `1px solid ${G.border}`,
+              minHeight: 60,
+            }}>
+              {/* Hour label */}
+              <div style={{
+                padding: '8px 10px',
+                borderRight: isHe ? 'none' : `1px solid ${G.border}`,
+                borderLeft:  isHe ? `1px solid ${G.border}` : 'none',
+                display: 'flex', alignItems: 'flex-start', paddingTop: 10,
+                color: G.muted, fontSize: 11, fontWeight: 500,
+                justifyContent: isHe ? 'flex-end' : 'flex-start',
+              }}>
+                {String(hour).padStart(2, '0')}:00
+              </div>
+
+              {/* Day cells */}
+              {weekDays.map((day, di) => {
+                const cellEvents = getEventsAt(day, hour)
+                const today      = isSameDay(day, new Date())
+                return (
+                  <div key={di}
+                    onClick={() => openAdd(day, hour)}
+                    style={{
+                      borderRight: isHe ? 'none' : `1px solid ${G.border}`,
+                      borderLeft:  isHe ? `1px solid ${G.border}` : 'none',
+                      padding: '4px 5px', cursor: 'pointer', minHeight: 60,
+                      background: today ? 'rgba(94,104,94,0.025)' : 'transparent',
+                      transition: 'background 0.15s',
+                    }}
+                    onMouseEnter={e  => { e.currentTarget.style.background = 'rgba(94,104,94,0.06)' }}
+                    onMouseLeave={e  => { e.currentTarget.style.background = today ? 'rgba(94,104,94,0.025)' : 'transparent' }}
+                  >
+                    {cellEvents.map(ev => {
+                      const client = clients.find(c => c.id === ev.clientId)
+                      const plat   = PLATFORMS[ev.platform] || PLATFORMS.task
+                      const color  = clientColorMap[ev.clientId] || G.smoke
+                      const typeLabel = isHe
+                        ? EVENT_TYPES[ev.type]?.label
+                        : EVENT_TYPES[ev.type]?.labelEn
+
+                      return (
+                        <div key={ev.id}
+                          onClick={e => { e.stopPropagation(); openEdit(ev) }}
+                          style={{
+                            background: plat.bg,
+                            borderLeft:  isHe ? 'none' : `3px solid ${color}`,
+                            borderRight: isHe ? `3px solid ${color}` : 'none',
+                            borderRadius: 7, padding: '5px 8px', marginBottom: 3,
+                            cursor: 'pointer',
+                            boxShadow: '0 1px 4px rgba(0,0,0,0.07)',
+                            transition: 'transform 0.1s, box-shadow 0.1s',
+                          }}
+                          onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 3px 10px rgba(0,0,0,0.12)' }}
+                          onMouseLeave={e => { e.currentTarget.style.transform = 'none';            e.currentTarget.style.boxShadow = '0 1px 4px rgba(0,0,0,0.07)' }}
+                        >
+                          <div style={{ fontSize: 10, fontWeight: 700, color, marginBottom: 1 }}>
+                            {ev.time} · {typeLabel}
+                          </div>
+                          <div style={{ fontSize: 11, fontWeight: 500, color: G.text, lineHeight: 1.3 }}>
+                            {ev.title}
+                          </div>
+                          {client && (
+                            <div style={{ fontSize: 10, color: G.muted, marginTop: 2 }}>
+                              {client.name}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                )
+              })}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* ═══════════════════════════════════ Add / Edit Modal */}
+      {showModal && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(28,28,28,0.45)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            zIndex: 1000, backdropFilter: 'blur(5px)', padding: 20,
+          }}
+          onClick={() => setShowModal(false)}
+        >
+          <div
+            style={{
+              background: G.white, borderRadius: 20, padding: '32px 36px',
+              width: '100%', maxWidth: 520,
+              boxShadow: '0 24px 80px rgba(0,0,0,0.18)',
+              direction: isHe ? 'rtl' : 'ltr',
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Modal header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 28 }}>
+              <h2 style={{ ...serif, fontSize: 24, fontWeight: 700, color: G.text, margin: 0 }}>
+                {editingEvent
+                  ? (isHe ? 'עריכת אירוע' : 'Edit Event')
+                  : (isHe ? 'אירוע חדש' : 'New Event')}
+              </h2>
+              <button onClick={() => setShowModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: G.muted }}>
+                <X size={20} />
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+
+              {/* Title */}
+              <div>
+                <label style={labelStyle}>{isHe ? 'כותרת' : 'Title'}</label>
+                <input
+                  value={form.title}
+                  onChange={e => setForm(p => ({ ...p, title: e.target.value }))}
+                  placeholder={isHe ? 'למשל: פוסט חדש לאמן TLV' : 'e.g. New Post for Aman TLV'}
+                  style={inputStyle}
+                />
+              </div>
+
+              {/* Client + Platform */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                <div>
+                  <label style={labelStyle}>{isHe ? 'לקוח' : 'Client'}</label>
+                  <select
+                    value={form.clientId}
+                    onChange={e => setForm(p => ({ ...p, clientId: e.target.value }))}
+                    style={{ ...inputStyle }}
+                  >
+                    <option value="">{isHe ? 'בחר לקוח' : 'Select client'}</option>
+                    {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label style={labelStyle}>{isHe ? 'פלטפורמה' : 'Platform'}</label>
+                  <select
+                    value={form.platform}
+                    onChange={e => setForm(p => ({ ...p, platform: e.target.value }))}
+                    style={{ ...inputStyle }}
+                  >
+                    {Object.entries(PLATFORMS).map(([k, v]) => (
+                      <option key={k} value={k}>{isHe ? v.labelHe : v.label}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Content type */}
+              <div>
+                <label style={labelStyle}>{isHe ? 'סוג תוכן' : 'Content Type'}</label>
+                <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>
+                  {Object.entries(EVENT_TYPES).map(([k, v]) => (
+                    <button key={k}
+                      onClick={() => setForm(p => ({ ...p, type: k }))}
+                      style={{
+                        ...sans, padding: '6px 16px', borderRadius: 20,
+                        fontSize: 12, fontWeight: 500, cursor: 'pointer',
+                        background: form.type === k ? G.smoke : G.ivory,
+                        color:      form.type === k ? G.white : G.muted,
+                        border: `1.5px solid ${form.type === k ? G.smoke : G.border}`,
+                        transition: 'all 0.15s',
+                      }}
+                    >
+                      {isHe ? v.label : v.labelEn}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Date + Time */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                <div>
+                  <label style={labelStyle}>{isHe ? 'תאריך' : 'Date'}</label>
+                  <input type="date" value={form.date}
+                    onChange={e => setForm(p => ({ ...p, date: e.target.value }))}
+                    style={inputStyle}
+                  />
+                </div>
+                <div>
+                  <label style={labelStyle}>{isHe ? 'שעה' : 'Time'}</label>
+                  <input type="time" value={form.time}
+                    onChange={e => setForm(p => ({ ...p, time: e.target.value }))}
+                    style={inputStyle}
+                  />
+                </div>
+              </div>
+
+              {/* Notes */}
+              <div>
+                <label style={labelStyle}>{isHe ? 'הערות' : 'Notes'}</label>
+                <textarea
+                  value={form.notes}
+                  onChange={e => setForm(p => ({ ...p, notes: e.target.value }))}
+                  rows={3}
+                  placeholder={isHe ? 'הוראות, קישורים, הערות ייצור...' : 'Instructions, links, production notes...'}
+                  style={{ ...inputStyle, resize: 'vertical', fontFamily: 'inherit' }}
+                />
+              </div>
+
+              {/* AI Auto-dispatch toggle */}
+              {!editingEvent && (
+                <div
+                  onClick={() => setForm(p => ({ ...p, autoDispatch: !p.autoDispatch }))}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 12,
+                    padding: '14px 16px', borderRadius: 12,
+                    background: form.autoDispatch ? 'rgba(94,104,94,0.07)' : G.ivory,
+                    border: `1.5px solid ${form.autoDispatch ? G.smoke : G.border}`,
+                    cursor: 'pointer', transition: 'all 0.2s',
+                  }}
+                >
+                  <div style={{
+                    width: 22, height: 22, borderRadius: 6, flexShrink: 0,
+                    background: form.autoDispatch ? G.smoke : 'transparent',
+                    border: `2px solid ${form.autoDispatch ? G.smoke : G.border}`,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    transition: 'all 0.2s',
+                  }}>
+                    {form.autoDispatch && <Check size={13} color="white" />}
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: G.text }}>
+                      ⚡ {isHe ? 'שגר אוטומטית למשימות' : 'Auto-dispatch to Tasks'}
+                    </div>
+                    <div style={{ fontSize: 11, color: G.muted, marginTop: 2 }}>
+                      {isHe
+                        ? 'הסוכן החכם יעביר את האירוע למשימות היומיות ולתיקיית הלקוח'
+                        : 'AI agent will push event to daily tasks & client folder'}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Modal actions */}
+            <div style={{ display: 'flex', gap: 10, marginTop: 28, justifyContent: isHe ? 'flex-start' : 'flex-end' }}>
+              {editingEvent && (
+                <button onClick={() => deleteEvent(editingEvent)} style={{
+                  ...sans, padding: '10px 20px', borderRadius: 10, border: 'none',
+                  background: '#fee2e2', color: '#dc2626', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                }}>
+                  {isHe ? 'מחק' : 'Delete'}
+                </button>
+              )}
+              <button onClick={() => setShowModal(false)} style={{
+                ...sans, padding: '10px 20px', borderRadius: 10, cursor: 'pointer',
+                border: `1.5px solid ${G.border}`, background: 'transparent',
+                color: G.muted, fontSize: 13, fontWeight: 600,
+              }}>
+                {isHe ? 'ביטול' : 'Cancel'}
+              </button>
+              <button onClick={saveEvent} style={{
+                ...sans, padding: '10px 28px', borderRadius: 10, border: 'none',
+                background: `linear-gradient(135deg, ${G.smokeDark}, ${G.smoke})`,
+                color: G.white, fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                boxShadow: '0 2px 10px rgba(94,104,94,0.3)',
+              }}>
+                {isHe ? 'שמור' : 'Save'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════ AI Notification Toast */}
+      {aiNotif && (
+        <div style={{
+          position: 'fixed',
+          bottom: 28,
+          left:  isHe ? 28 : 'auto',
+          right: isHe ? 'auto' : 28,
+          background: G.smokeDark, color: G.white,
+          borderRadius: 14, padding: '14px 20px',
+          boxShadow: '0 8px 32px rgba(0,0,0,0.2)',
+          display: 'flex', alignItems: 'center', gap: 12,
+          zIndex: 2000, maxWidth: 340,
+          animation: 'agamSlideUp 0.3s ease',
+        }}>
+          <Zap size={18} color={G.gold} />
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 3 }}>
+              {isHe ? '⚡ הסוכן פעל בהצלחה' : '⚡ AI Agent Dispatched'}
+            </div>
+            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.7)' }}>
+              {isHe
+                ? `"${aiNotif.title}" נוסף למשימות${aiNotif.client ? ` ולתיקיית ${aiNotif.client}` : ''}`
+                : `"${aiNotif.title}" added to tasks${aiNotif.client ? ` & ${aiNotif.client}'s folder` : ''}`}
+            </div>
+          </div>
+        </div>
+      )}
+
+      <style>{`
+        @keyframes agamSlideUp {
+          from { transform: translateY(16px); opacity: 0; }
+          to   { transform: translateY(0);    opacity: 1; }
+        }
+        input[type="date"]::-webkit-calendar-picker-indicator,
+        input[type="time"]::-webkit-calendar-picker-indicator {
+          opacity: 0.5; cursor: pointer;
+        }
+        select { appearance: auto; }
+      `}</style>
+    </div>
+  )
+}  

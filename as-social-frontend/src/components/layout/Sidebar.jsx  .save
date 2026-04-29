@@ -1,0 +1,49 @@
+import { NavLink } from 'react-router-dom'
+import { LayoutDashboard, Users, FileText, Target, BarChart3, Settings, LogOut } from 'lucide-react'
+import { useAuth } from '@/context/AuthContext'
+import { getInitials } from '@/utils/helpers'
+
+const NAV = [
+  { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+  { to: '/clients',   icon: Users,           label: 'Clients'   },
+  { to: '/posts',     icon: FileText,        label: 'Posts'     },
+  { to: '/leads',     icon: Target,          label: 'Leads'     },
+  { to: '/kpis',      icon: BarChart3,       label: 'KPIs'      },
+  { to: '/settings',  icon: Settings,        label: 'Settings'  },
+]
+
+export default function Sidebar() {
+  const { user, logout } = useAuth()
+  return (
+    <aside style={{width:'230px',flexShrink:0,display:'flex',flexDirection:'column',background:'#3A443A',height:'100vh'}}>
+      <div style={{padding:'24px 20px',borderBottom:'1px solid rgba(255,255,255,0.07)',display:'flex',alignItems:'center'}}>
+        <img src='/logo.png' alt='AS Social' style={{height:'44px',objectFit:'contain'}} />
+      </div>
+      <nav style={{flex:1,padding:'16px 0',display:'flex',flexDirection:'column'}}>
+        <p style={{fontSize:'9px',color:'rgba(255,255,255,0.25)',letterSpacing:'2px',textTransform:'uppercase',padding:'0 20px 8px'}}>MAIN MENU</p>
+        {NAV.map(({ to, icon: Icon, label }) => (
+          <NavLink key={to} to={to} className={({ isActive }) => 'sidebar-link' + (isActive ? ' active' : '')}>
+            <Icon size={16} />
+            {label}
+          </NavLink>
+        ))}
+      </nav>
+      <div style={{padding:'16px',borderTop:'1px solid rgba(255,255,255,0.07)'}}>
+        <div style={{display:'flex',alignItems:'center',gap:'10px',padding:'8px'}}>
+          <div style={{width:'32px',height:'32px',borderRadius:'50%',background:'linear-gradient(135deg,#BFB3A6,#A68B7D)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+            <span style={{fontSize:'12px',fontWeight:700,color:'white'}}>{getInitials(user?.name)}</span>
+          </div>
+          <div style={{flex:1,minWidth:0}}>
+            <p style={{fontSize:'12px',fontWeight:500,color:'rgba(255,255,255,0.85)',margin:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{user?.name}</p>
+            <p style={{fontSize:'10px',color:'rgba(255,255,255,0.35)',margin:0}}>{user?.role}</p>
+          </div>
+          <button onClick={logout} style={{background:'none',border:'none',cursor:'pointer',color:'rgba(255,255,255,0.35)',padding:0}}>
+            <LogOut size={15} />
+          </button>
+        </div>
+      </div>
+    </aside>
+  )
+} 
+ 
+

@@ -1,0 +1,174 @@
+import { useEffect, useState } from 'react'
+import { useAuth } from '@/context/AuthContext'
+
+const CLIENTS = [
+  { name: 'Villa Azure',       engagement: 87, nextPost: 'היום 14:00',  platform: 'Instagram', health: 'high'   },
+  { name: 'Seaside Boutique',  engagement: 62, nextPost: 'מחר 10:00',   platform: 'Facebook',  health: 'medium' },
+  { name: 'Aman Tel Aviv',     engagement: 94, nextPost: 'היום 18:00',  platform: 'TikTok',    health: 'high'   },
+  { name: 'Kempinski Eilat',   engagement: 45, nextPost: 'יום ד׳ 12:00', platform: 'Instagram', health: 'low'    },
+  { name: 'Natura Cabins',     engagement: 78, nextPost: 'מחר 16:00',   platform: 'Instagram', health: 'high'   },
+]
+
+const TASKS = [
+  { id:1, text: 'לצלם תוכן לבריכה — Villa Azure',      priority: 'urgent', done: false, client: 'Villa Azure'      },
+  { id:2, text: 'לכתוב קפי לסטורי שישי — Aman',        priority: 'high',   done: false, client: 'Aman Tel Aviv'     },
+  { id:3, text: 'לתזמן 3 פוסטים לשבוע הבא',            priority: 'medium', done: false, client: 'Seaside Boutique'  },
+  { id:4, text: 'לעדכן Bio בכל הפרופילים',             priority: 'low',    done: true,  client: 'כל הלקוחות'        },
+  { id:5, text: 'ריל סנסט — Kempinski Eilat',           priority: 'high',   done: false, client: 'Kempinski Eilat'   },
+]
+
+const CALENDAR = [
+  { day: 'א׳', posts: [{ platform: 'IG', type: 'Reel',  client: 'Villa Azure'     }] },
+  { day: 'ב׳', posts: [{ platform: 'FB', type: 'Still', client: 'Seaside Boutique' }, { platform: 'IG', type: 'Story', client: 'Aman Tel Aviv' }] },
+  { day: 'ג׳', posts: [] },
+  { day: 'ד׳', posts: [{ platform: 'TT', type: 'Reel',  client: 'Aman Tel Aviv'    }] },
+  { day: 'ה׳', posts: [{ platform: 'IG', type: 'Still', client: 'Kempinski Eilat'  }] },
+  { day: 'ו׳', posts: [{ platform: 'IG', type: 'Story', client: 'Natura Cabins'    }, { platform: 'FB', type: 'Still', client: 'Villa Azure' }] },
+  { day: 'ש׳', posts: [] },
+]
+
+const platformColor = { IG: '#E1306C', FB: '#1877F2', TT: '#000000', YT: '#FF0000' }
+const typeIcon = { Reel: '🎬', Story: '⭕', Still: '🖼️' }
+const priorityStyle = {
+  urgent: { label: 'דחוף',   bg: '#FFF0EE', color: '#C0392B', dot: '#C0392B' },
+  high:   { label: 'גבוה',   bg: '#FFF8EE', color: '#E67E22', dot: '#E67E22' },
+  medium: { label: 'בינוני', bg: '#F0F7EE', color: '#27AE60', dot: '#27AE60' },
+  low:    { label: 'נמוך',   bg: '#F5F5F5', color: '#95A5A6', dot: '#95A5A6' },
+}
+const healthColor = { high: '#6D7B6C', medium: '#E67E22', low: '#C0392B' }
+
+export default function Dashboard() {
+  const { user } = useAuth()
+  const [tasks, setTasks]         = useState(TASKS)
+  const [focusMode, setFocusMode] = useState(false)
+  const [hour, setHour]           = useState(new Date().getHours())
+
+  const greeting = hour < 12 ? 'בוקר טוב' : hour < 17 ? 'צהריים טובים' : 'ערב טוב'
+  const pendingVillas  = CLIENTS.filter(c => c.health !== 'high').length
+  const urgentClient   = CLIENTS.find(c => c.health === 'high')
+  const urgentTask     = tasks.find(t => t.priority === 'urgent' && !t.done)
+
+  const toggleTask = (id) => setTasks(ts => ts.map(t => t.id === id ? {...t, done: !t.done} : t))
+
+  return (
+    <div style={{display:'flex',flexDirection:'column',gap:'24px',padding:'8px 0',direction:'rtl'}}>
+
+      {/* ══ MORNING BRIEF ══ */}
+      <div style={{background:'#FFFFFF',borderRadius:'16px',border:'1px solid rgba(58,68,58,0.10)',padding:'24px 28px',display:'flex',alignItems:'center',justifyContent:'space-between',boxShadow:'0 1px 8px rgba(58,68,58,0.06)'}}>
+        <div>
+          <p style={{fontFamily:'"Cormorant Garamond",serif',fontSize:'22px',fontStyle:'italic',color:'#3A443A',fontWeight:300,marginBottom:'6px'}}>
+            {greeting}, {user?.name?.split(' ')[0]}
+          </p>
+          <p style={{fontSize:'13px',color:'#6D7B6C',fontWeight:300,lineHeight:1.6}}>
+            יש לך <strong style={{color:'#3A443A'}}>{pendingVillas} נכסים</strong> הדורשים תשומת לב
+            {urgentClient && <> · התנגאז'מנט גבוה ב-<strong style={{color:'#3A443A'}}>{urgentClient.name}</strong></>}
+          </p>
+        </div>
+        <div style={{display:'flex',alignItems:'center',gap:'12px'}}>
+          <div style={{textAlign:'center',padding:'10px 16px',background:'#F2EDE4',borderRadius:'12px'}}>
+            <p style={{fontSize:'11px',color:'#9AAD99',marginBottom:'2px'}}>היום</p>
+            <p style={{fontSize:'13px',fontWeight:500,color:'#3A443A'}}>{new Date().toLocaleDateString('he-IL',{weekday:'short',day:'numeric',month:'short'})}</p>
+          </div>
+          <button style={{width:'40px',height:'40px',borderRadius:'50%',background:'#3A443A',border:'none',color:'white',fontSize:'22px',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',boxShadow:'0 2px 8px rgba(58,68,58,0.25)'}}>+</button>
+        </div>
+      </div>
+
+      {/* ══ PORTFOLIO OVERVIEW ══ */}
+      <div>
+        <p style={{fontFamily:'"Cormorant Garamond",serif',fontSize:'16px',fontStyle:'italic',color:'#3A443A',marginBottom:'12px',fontWeight:400}}>Portfolio Overview</p>
+        <div style={{display:'flex',gap:'14px',overflowX:'auto',paddingBottom:'8px'}}>
+          {CLIENTS.map(c => (
+            <div key={c.name} style={{minWidth:'190px',background:'#FFFFFF',borderRadius:'14px',border:`1px solid ${healthColor[c.health]}30`,padding:'16px',boxShadow:'0 1px 6px rgba(58,68,58,0.05)',cursor:'pointer',transition:'all 0.2s',flexShrink:0}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:'10px'}}>
+                <p style={{fontSize:'13px',fontWeight:500,color:'#3A443A',lineHeight:1.3}}>{c.name}</p>
+                <span style={{width:'8px',height:'8px',borderRadius:'50%',background:healthColor[c.health],flexShrink:0,marginTop:'3px'}} />
+              </div>
+              <div style={{marginBottom:'8px'}}>
+                <div style={{display:'flex',justifyContent:'space-between',marginBottom:'4px'}}>
+                  <span style={{fontSize:'11px',color:'#9AAD99'}}>Engagement</span>
+                  <span style={{fontSize:'11px',fontWeight:600,color:healthColor[c.health]}}>{c.engagement}%</span>
+                </div>
+                <div style={{height:'3px',background:'#F2EDE4',borderRadius:'2px'}}>
+                  <div style={{width:`${c.engagement}%`,height:'100%',background:healthColor[c.health],borderRadius:'2px'}} />
+                </div>
+              </div>
+              <p style={{fontSize:'10px',color:'#BFB3A6'}}>{c.platform} · {c.nextPost}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* ══ TASKS + AI PANEL ══ */}
+      <div style={{display:'grid',gridTemplateColumns:'1fr 320px',gap:'16px'}}>
+
+        {/* Tasks */}
+        <div style={{background:'#FFFFFF',borderRadius:'16px',border:'1px solid rgba(58,68,58,0.10)',padding:'20px 24px',boxShadow:'0 1px 8px rgba(58,68,58,0.06)'}}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'16px'}}>
+            <p style={{fontFamily:'"Cormorant Garamond",serif',fontSize:'16px',fontStyle:'italic',color:'#3A443A',fontWeight:400}}>משימות</p>
+            <button onClick={() => setFocusMode(f => !f)} style={{fontSize:'11px',padding:'5px 12px',borderRadius:'20px',border:'1px solid rgba(58,68,58,0.15)',background:focusMode?'#3A443A':'transparent',color:focusMode?'white':'#6D7B6C',cursor:'pointer',transition:'all 0.2s'}}>
+              {focusMode ? '🎯 Focus Mode' : 'Focus Mode'}
+            </button>
+          </div>
+
+          {(focusMode ? tasks.filter(t => t.priority === 'urgent' && !t.done) : tasks).map(task => {
+            const ps = priorityStyle[task.priority]
+            return (
+              <div key={task.id} style={{display:'flex',alignItems:'flex-start',gap:'12px',padding:'10px 0',borderBottom:'1px solid rgba(58,68,58,0.06)'}}>
+                <button onClick={() => toggleTask(task.id)} style={{width:'18px',height:'18px',borderRadius:'5px',border:`2px solid ${task.done ? '#6D7B6C' : 'rgba(58,68,58,0.2)'}`,background:task.done?'#6D7B6C':'transparent',cursor:'pointer',flexShrink:0,marginTop:'1px',display:'flex',alignItems:'center',justifyContent:'center',transition:'all 0.2s'}}>
+                  {task.done && <span style={{color:'white',fontSize:'11px'}}>✓</span>}
+                </button>
+                <div style={{flex:1}}>
+                  <p style={{fontSize:'13px',color:task.done?'#BFB3A6':'#3A443A',textDecoration:task.done?'line-through':'none',fontWeight:400,marginBottom:'3px'}}>{task.text}</p>
+                  <p style={{fontSize:'10px',color:'#9AAD99'}}>{task.client}</p>
+                </div>
+                <span style={{fontSize:'10px',padding:'2px 8px',borderRadius:'10px',background:ps.bg,color:ps.color,flexShrink:0}}>{ps.label}</span>
+              </div>
+            )
+          })}
+        </div>
+
+        {/* AI Panel */}
+        <div style={{background:'linear-gradient(135deg,rgba(109,123,108,0.08),rgba(191,179,166,0.12))',backdropFilter:'blur(10px)',borderRadius:'16px',border:'1px solid rgba(109,123,108,0.2)',padding:'20px',boxShadow:'0 1px 8px rgba(58,68,58,0.06)'}}>
+          <div style={{display:'flex',alignItems:'center',gap:'8px',marginBottom:'16px'}}>
+            <span style={{fontSize:'16px'}}>✦</span>
+            <p style={{fontFamily:'"Cormorant Garamond",serif',fontSize:'15px',fontStyle:'italic',color:'#3A443A',fontWeight:400}}>AI Insights</p>
+          </div>
+          <div style={{display:'flex',flexDirection:'column',gap:'12px'}}>
+            <div style={{background:'rgba(255,255,255,0.7)',borderRadius:'10px',padding:'12px'}}>
+              <p style={{fontSize:'11px',color:'#9AAD99',marginBottom:'4px'}}>המלצה לעכשיו</p>
+              <p style={{fontSize:'12px',color:'#3A443A',lineHeight:1.6}}>האור הטבעי עכשיו מושלם לצילום הבריכה ב-Villa Azure. זמן אידיאלי לסטורי.</p>
+            </div>
+            <div style={{background:'rgba(255,255,255,0.7)',borderRadius:'10px',padding:'12px'}}>
+              <p style={{fontSize:'11px',color:'#9AAD99',marginBottom:'4px'}}>תובנת שבוע</p>
+              <p style={{fontSize:'12px',color:'#3A443A',lineHeight:1.6}}>פוסטים בין 18:00-20:00 מקבלים 40% יותר אינטראקציה עבור הלקוחות שלך.</p>
+            </div>
+            <div style={{background:'rgba(255,255,255,0.7)',borderRadius:'10px',padding:'12px'}}>
+              <p style={{fontSize:'11px',color:'#9AAD99',marginBottom:'4px'}}>אזהרה</p>
+              <p style={{fontSize:'12px',color:'#C0392B',lineHeight:1.6}}>Kempinski Eilat — 5 ימים ללא פוסט. מומלץ לפרסם היום.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ══ CONTENT CALENDAR ══ */}
+      <div style={{background:'#FFFFFF',borderRadius:'16px',border:'1px solid rgba(58,68,58,0.10)',padding:'20px 24px',boxShadow:'0 1px 8px rgba(58,68,58,0.06)'}}>
+        <p style={{fontFamily:'"Cormorant Garamond",serif',fontSize:'16px',fontStyle:'italic',color:'#3A443A',marginBottom:'16px',fontWeight:400}}>לוח תוכן — שבוע נוכחי</p>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:'8px'}}>
+          {CALENDAR.map(day => (
+            <div key={day.day} style={{background:'#F9F7F4',borderRadius:'10px',padding:'10px 8px',minHeight:'80px'}}>
+              <p style={{fontSize:'11px',fontWeight:600,color:'#6D7B6C',marginBottom:'8px',textAlign:'center'}}>{day.day}</p>
+              {day.posts.map((p,i) => (
+                <div key={i} style={{background:'#FFFFFF',borderRadius:'6px',padding:'4px 6px',marginBottom:'4px',borderRight:`3px solid ${platformColor[p.platform]}`,boxShadow:'0 1px 3px rgba(0,0,0,0.05)'}}>
+                  <p style={{fontSize:'9px',fontWeight:600,color:platformColor[p.platform]}}>{p.platform}</p>
+                  <p style={{fontSize:'9px',color:'#6D7B6C'}}>{typeIcon[p.type]} {p.type}</p>
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      </div>
+
+    </div>
+  )
+}  cp /tmp/Dashboard.jsx ~/Downloads/AS-Social-Platform-main/as-social-frontend/src/pages/Dashboard.jsx && echo "OK" 
+

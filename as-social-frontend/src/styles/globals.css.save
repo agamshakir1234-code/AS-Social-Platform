@@ -1,0 +1,65 @@
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300;1,400&family=Heebo:wght@300;400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html { direction: rtl; }
+  body {
+    background-color: #F2EDE4;
+    color: #3A443A;
+    font-family: 'Heebo', sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #BFB3A6; border-radius: 2px; }
+}
+
+@layer components {
+  .card {
+    background: #FFFFFF;
+    border: 1px solid rgba(58,68,58,0.10);
+    border-radius: 16px;
+  }
+  .stat-card {
+    @apply card p-5 flex flex-col gap-3;
+  }
+  .sidebar-link {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 20px;
+    cursor: pointer;
+    transition: all 0.2s;
+    border-right: 3px solid transparent;
+    color: rgba(255,255,255,0.55);
+    font-size: 13.5px;
+    font-weight: 400;
+  }
+  .sidebar-link:hover {
+    background: rgba(255,255,255,0.05);
+    color: rgba(255,255,255,0.85);
+  }
+  .sidebar-link.active {
+    background: rgba(191,179,166,0.14);
+    color: #F2EDE4;
+    border-right-color: #BFB3A6;
+    font-weight: 500;
+  }
+  .section-title {
+    font-size: 11px;
+    font-weight: 600;
+    color: #8A9B8A;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+  }
+  .animate-fade-in {
+    animation: fadeIn 0.3s ease;
+  }
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(6px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+}  
